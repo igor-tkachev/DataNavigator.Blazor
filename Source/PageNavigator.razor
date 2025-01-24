@@ -1,0 +1,41 @@
+﻿@implements IPaginationStateSubscriber
+@implements IDisposable
+
+@ChildContent(State)
+
+@code {
+	/// <summary>
+	/// Specifies the associated <see cref="PaginationState"/>. This parameter is required.
+	/// </summary>
+	[Parameter, EditorRequired]
+	public PaginationState State { get; set; } = default!;
+
+	/// <summary>
+	/// Optionally supplies a template for rendering the page count summary.
+	/// </summary>
+	[Parameter]
+	public RenderFragment<PaginationState> ChildContent { get; set; } = null!;
+
+	public Task GoFirstAsync()    => State.SetCurrentPageIndexAsync(0);
+	public Task GoPreviousAsync() => State.SetCurrentPageIndexAsync(State.CurrentPageIndex - 1);
+	public Task GoNextAsync()     => State.SetCurrentPageIndexAsync(State.CurrentPageIndex + 1);
+	public Task GoLastAsync()     => State.SetCurrentPageIndexAsync(State.LastPageIndex.GetValueOrDefault(0));
+
+	public bool CanGoBack     => State.CurrentPageIndex > 0;
+	public bool CanGoForwards => State.CurrentPageIndex < State.LastPageIndex;
+
+	protected override void OnParametersSet()
+	{
+		State.AddSubscriber(this);
+	}
+
+	Task IPaginationStateSubscriber.StateHasChangedAsync(PaginationState caller)
+	{
+		return InvokeAsync(StateHasChanged);
+	}
+
+	public void Dispose()
+	{
+		State.RemoveSubscriber(this);
+	}
+}

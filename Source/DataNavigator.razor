@@ -1,0 +1,355 @@
+﻿@namespace DataNavigator.Blazor
+@typeparam TDataItem
+@using System.IO.Compression
+@using System.Text
+@using System.Text.Json
+@using MessagePack
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
+@implements IPaginationStateSubscriber
+@implements IDisposable
+@inject PersistentComponentState          ApplicationState
+@inject ILogger<DataNavigator<TDataItem>> Logger
+@inject IJSRuntime                        JSRuntime
+@{
+	LogState($"DataNavigator {_items?.Count} items rendering...");
+
+	_shouldRender = false;
+
+	if (_items is not null)
+	{
+		foreach (var item in _items ?? [])
+		{
+			if (ChildContent is not null)
+			{
+				@ChildContent(item)
+			}
+		}
+	}
+	@*
+	else
+	{
+		@if (OperatingSystem.IsBrowser())
+		{
+			<h3>BROWSER</h3>
+		}
+		else
+		{
+			<h3>SERVER</h3>
+		}
+	}
+*@
+	if (CustomPersistState)
+	{
+		if (_items is not null /*&& RendererInfo.IsInteractive /*&& OperatingSystem.IsBrowser() && RendererInfo.Name == "WebAssembly"*/)
+		{
+			@GetCompressStateJson()
+		}
+		else
+		{
+			@GetCompressStateJsonEmpty()
+		}
+	}
+}
+
+@code
+{
+	[Parameter] public bool PersistState       { get; set; } = true;
+	[Parameter] public bool CustomPersistState { get; set; } = true;
+
+	public bool IsLoading { get; private set; }
+
+	PersistingComponentStateSubscription? _persistingSubscription;
+	ICollection<TDataItem>?               _items;
+
+	int _lastCurrentPageIndex;
+	int _lastTotalItemCount;
+
+	protected override void OnInitialized()
+	{
+		LogInfo();
+
+		if (PersistState)
+		{
+			_persistingSubscription = ApplicationState.RegisterOnPersisting(() => InvokeAsync(PersistStateAsJson), RenderMode.InteractiveAuto);
+
+			if (ApplicationState.TryTakeFromJson($"totalItemCount_{Id}", out int totalItemCount))
+			{
+				_lastTotalItemCount = totalItemCount;
+				if (Pagination is not null)
+					Pagination.TotalItemCount = totalItemCount;
+
+				if (ApplicationState.TryTakeFromJson($"pageIndex_{Id}", out int pageIndex))
+				{
+					_lastCurrentPageIndex = pageIndex;
+					if (Pagination is not null)
+						Pagination.CurrentPageIndex = pageIndex;
+				}
+
+				if (ApplicationState.TryTakeFromJson($"items_{Id}", out ICollection<TDataItem>? items))
+					_items = items;
+
+				_shouldRefresh = false;
+				_shouldRender  = true;
+
+				LogState("after persist");
+
+				//await InvokeAsync(StateHasChanged);
+			}
+		}
+
+		Pagination?.AddSubscriber(this);
+	}
+
+	protected override async Task OnInitializedAsync()
+	{
+		LogInfo();
+
+		if (CustomPersistState && RendererInfo.Name == "WebAssembly" && _items is null)
+		{
+			var data = await GetStateJson<DataNavigatorState?>();
+
+			if (data is not null)
+			{
+				_items                = data.Items;
+				_lastCurrentPageIndex = data.PageIndex;
+				_lastTotalItemCount   = data.TotalItemCount;
+
+				_shouldRefresh = false;
+				_shouldRender  = true;
+
+				if (Pagination is not null)
+				{
+					Pagination.CurrentPageIndex = _lastCurrentPageIndex;
+					Pagination.TotalItemCount   = _lastTotalItemCount;
+
+					await Pagination.StateHasChangedAsync();
+				}
+
+				LogState($@"after custom persist\n
+	IsBrowser     = {data.IsBrowser}
+	RendererInfo  = {data.RendererInfo}
+	IsInteractive = {data.IsInteractive}");
+
+				await InvokeAsync(StateHasChanged);
+			}
+		}
+
+		if (_shouldRefresh)
+			await RefreshDataCoreAsync();
+	}
+
+	void PersistStateAsJson()
+	{
+		LogInfo();
+		LogState();
+
+		if (_items is { Count: > 0 })
+		{
+			try
+			{
+				ApplicationState.PersistAsJson($"totalItemCount_{Id}", _lastTotalItemCount);
+				ApplicationState.PersistAsJson($"pageIndex_{Id}",      _lastCurrentPageIndex);
+				ApplicationState.PersistAsJson($"items_{Id}",          _items);
+			}
+			catch
+			{
+				// ignored
+			}
+		}
+	}
+
+	protected override void OnParametersSet()
+	{
+		LogInfo();
+		if (Items is not null && ItemsProvider is not null)
+			throw new InvalidOperationException($"{nameof(DataNavigator)} requires one of {nameof(Items)} or {nameof(ItemsProvider)}, but both were specified.");
+	}
+
+	JsonSerializerOptions _jsonOptions = new ()
+		{
+			WriteIndented        = false,
+			PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+		};
+
+	MarkupString GetCompressStateJson()
+	{
+		LogInfo();
+
+		return new MarkupString($@"
+<script>
+	document.AppState{Id?.Replace('-', 'x')} = '{CompressStateJson(new DataNavigatorState
+	{
+		Items          = _items?.ToList() ?? [],
+		PageIndex      = _lastCurrentPageIndex,
+		TotalItemCount = _lastTotalItemCount,
+		IsBrowser      = OperatingSystem.IsBrowser(),
+		RendererInfo   = RendererInfo.Name,
+		IsInteractive  = RendererInfo.IsInteractive,
+	})
+		}';
+</script>
+");
+	}
+
+	MarkupString GetCompressStateJsonEmpty()
+	{
+		return new MarkupString($@"
+<script>
+	document.AppState{Id?.Replace('-', 'x')} = null;
+</script>
+");
+	}
+
+	public class DataNavigatorState
+	{
+		public List<TDataItem>? Items          { get; set; }
+		public int              PageIndex      { get; set; }
+		public int              TotalItemCount { get; set; }
+		public bool             IsBrowser      { get; set; }
+		public string?          RendererInfo   { get; set; }
+		public bool             IsInteractive  { get; set; }
+	}
+
+	string CompressStateJson<T>(T data)
+	{
+		LogInfo();
+
+		if (data is null)
+			return string.Empty;
+
+		var now = DateTime.Now;
+
+		var jsonData = JsonSerializer.Serialize(data, _jsonOptions);
+
+		using var output = new MemoryStream();
+		using var gzip   = new GZipStream  (output, CompressionMode.Compress);
+		//		using var gzip   = new BrotliStream(output, CompressionMode.Compress);
+		using var writer = new StreamWriter(gzip, Encoding.UTF8);
+
+		writer.Write(jsonData);
+		writer.Flush();
+
+		var compressStateJson = Convert.ToBase64String(output.ToArray());
+
+		LogInfo($"compressState = {compressStateJson.Length} in {DateTime.Now - now}");
+
+		return compressStateJson;
+	}
+
+	string CompressState<T>(T data)
+	{
+		if (data is null)
+			return string.Empty;
+
+		var now = DateTime.Now;
+
+		var serializedData = MessagePackSerializer.Serialize(data);
+
+		using var output = new MemoryStream();
+		using var gzip   = new GZipStream  (output, CompressionMode.Compress);
+		//		using var gzip   = new BrotliStream(output, CompressionMode.Compress);
+
+		gzip.Write(serializedData, 0, serializedData.Length);
+		gzip.Flush();
+
+		var compressState = Convert.ToBase64String(output.ToArray());
+
+		LogInfo($"compressState = {compressState.Length} in {DateTime.Now - now}");
+
+		return compressState;
+	}
+
+	async Task<T?> GetStateJson<T>()
+	{
+		var compressedBase64 = await JSRuntime.InvokeAsync<string>("eval", $"document.AppState{Id?.Replace('-', 'x')}");
+
+		return !string.IsNullOrEmpty(compressedBase64) ? DecompressStateJson(compressedBase64) : default;
+
+		T? DecompressStateJson(string compressedData)
+		{
+			if (string.IsNullOrEmpty(compressedData))
+				return default;
+
+			var compressedBytes = Convert.FromBase64String(compressedData);
+
+			using var input  = new MemoryStream(compressedBytes);
+			using var gzip   = new GZipStream  (input, CompressionMode.Decompress);
+			//			using var gzip   = new BrotliStream(input, CompressionMode.Decompress);
+			using var reader = new StreamReader(gzip, Encoding.UTF8);
+
+			var jsonData = reader.ReadToEnd();
+
+			if (string.IsNullOrEmpty(jsonData))
+				return default;
+
+			return JsonSerializer.Deserialize<T>(jsonData, _jsonOptions);
+		}
+	}
+
+	async Task<T?> GetState<T>()
+	{
+		var compressedBase64 = await JSRuntime.InvokeAsync<string>("eval", $"document.AppState{Id?.Replace('-', 'x')}");
+
+		return !string.IsNullOrEmpty(compressedBase64) ? DecompressState(compressedBase64) : default;
+
+		T? DecompressState(string compressedData)
+		{
+			if (string.IsNullOrEmpty(compressedData))
+				return default;
+
+			var compressedBytes = Convert.FromBase64String(compressedData);
+
+			using var input              = new MemoryStream(compressedBytes);
+			using var gzip               = new GZipStream  (input, CompressionMode.Decompress);
+			//			using var gzip               = new BrotliStream(input, CompressionMode.Decompress);
+			using var decompressedStream = new MemoryStream();
+
+			gzip.CopyTo(decompressedStream);
+
+			var decompressedBytes = decompressedStream.ToArray();
+
+			return MessagePackSerializer.Deserialize<T>(decompressedBytes);
+		}
+	}
+
+	bool _shouldRefresh = true;
+	bool _shouldRender;
+
+	protected override bool ShouldRender()
+	{
+		LogInfo($"ShouldRender : {_shouldRender}");
+
+		return _shouldRender;
+	}
+
+	Task IPaginationStateSubscriber.CurrentPageItemsChangedAsync(PaginationState caller, int pageIndex)
+	{
+		if (_lastCurrentPageIndex != pageIndex)
+		{
+			return RefreshDataCoreAsync();
+		}
+
+		return Task.CompletedTask;
+	}
+
+	Task IPaginationStateSubscriber.TotalItemCountChangedAsync(PaginationState caller, int totalItemCount)
+	{
+		if (_lastTotalItemCount != totalItemCount)
+		{
+			return RefreshDataCoreAsync();
+		}
+
+		return Task.CompletedTask;
+	}
+
+	Task IPaginationStateSubscriber.StateHasChangedAsync(PaginationState caller)
+	{
+		return InvokeAsync(StateHasChanged);
+	}
+
+	public void Dispose()
+	{
+		_persistingSubscription?.Dispose();
+	}
+}

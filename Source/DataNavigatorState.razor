@@ -1,0 +1,116 @@
+﻿@typeparam TDataItem
+@using System.IO.Compression
+@using System.Text
+@using System.Text.Json
+@using MessagePack
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<script id="@Id" type="application/octet-stream">
+	@CompressStateJson(State)
+</script>
+
+@code {
+	[Parameter] public string     Id    { get; set; } = default!;
+	[Parameter] public TDataItem? State { get; set; }
+
+	// Декодируем и десериализуем данные при инициализации компонента
+//	protected override async Task OnInitializedAsync()
+//	{
+//		if (RendererInfo.Name == "WebAssembly")
+//		{
+//			var compressedBase64 = await JSRuntime.InvokeAsync<string>("getCompressedState", Id);
+//
+//			if (!string.IsNullOrEmpty(compressedBase64))
+//			{
+//				State = DecompressStateJson(compressedBase64);
+//			}
+//		}
+//	}
+
+	public async Task<TDataItem?> GetState()
+	{
+		if (RendererInfo.Name == "WebAssembly")
+		{
+			var compressedBase64 = await JSRuntime.InvokeAsync<string>("getCompressedState", Id);
+
+			if (!string.IsNullOrEmpty(compressedBase64))
+			{
+				return DecompressStateJson(compressedBase64);
+			}
+		}
+
+		return default;
+	}
+
+	string CompressState(TDataItem? data)
+	{
+		if (data is null)
+			return string.Empty;
+
+		var serializedData = MessagePackSerializer.Serialize(data);
+
+		using var output = new MemoryStream();
+		using var gzip   = new GZipStream(output, CompressionMode.Compress);
+
+		gzip.Write(serializedData, 0, serializedData.Length);
+
+		return Convert.ToBase64String(output.ToArray());
+	}
+
+	TDataItem? DecompressState(string compressedData)
+	{
+		if (string.IsNullOrEmpty(compressedData))
+			return default;
+
+		var compressedBytes = Convert.FromBase64String(compressedData);
+
+		using var input              = new MemoryStream(compressedBytes);
+		using var gzip               = new GZipStream(input, CompressionMode.Decompress);
+		using var decompressedStream = new MemoryStream();
+
+		gzip.CopyTo(decompressedStream);
+
+		var decompressedBytes = decompressedStream.ToArray();
+
+		return MessagePackSerializer.Deserialize<TDataItem>(decompressedBytes);
+	}
+
+	readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+	{
+		WriteIndented        = false,
+		PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+	};
+
+	string CompressStateJson(TDataItem? data)
+	{
+		if (data is null)
+			return string.Empty;
+
+		var       jsonData = JsonSerializer.Serialize(data, _jsonOptions);
+
+		using var output = new MemoryStream();
+		using var gzip   = new GZipStream  (output, CompressionMode.Compress);
+		using var writer = new StreamWriter(gzip, Encoding.UTF8);
+
+		writer.Write(jsonData);
+
+		return Convert.ToBase64String(output.ToArray());
+	}
+
+	TDataItem? DecompressStateJson(string compressedData)
+	{
+		if (string.IsNullOrEmpty(compressedData))
+			return default;
+
+		var compressedBytes = Convert.FromBase64String(compressedData);
+
+		using var input  = new MemoryStream(compressedBytes);
+		using var gzip   = new GZipStream(input, CompressionMode.Decompress);
+		using var reader = new StreamReader(gzip, Encoding.UTF8);
+
+		var jsonData = reader.ReadToEnd();
+
+		return JsonSerializer.Deserialize<TDataItem>(jsonData, _jsonOptions);
+	}
+}
