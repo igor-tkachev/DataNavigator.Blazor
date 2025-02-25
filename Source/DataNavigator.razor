@@ -9,7 +9,7 @@
 @implements IPaginationStateSubscriber
 @implements IDisposable
 @inject PersistentComponentState          ApplicationState
-@inject ILogger<DataNavigator<TDataItem>> Logger
+@inject ILogger<DataNavigator2<TDataItem>> Logger
 @inject IJSRuntime                        JSRuntime
 @{
 	LogState($"DataNavigator {_items?.Count} items rendering...");
@@ -26,22 +26,10 @@
 			}
 		}
 	}
-	@*
-	else
-	{
-		@if (OperatingSystem.IsBrowser())
-		{
-			<h3>BROWSER</h3>
-		}
-		else
-		{
-			<h3>SERVER</h3>
-		}
-	}
-*@
+
 	if (CustomPersistState)
 	{
-		if (_items is not null /*&& RendererInfo.IsInteractive /*&& OperatingSystem.IsBrowser() && RendererInfo.Name == "WebAssembly"*/)
+		if (_items is not null)
 		{
 			@GetCompressStateJson()
 		}

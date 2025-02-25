@@ -3,7 +3,7 @@
 namespace DataNavigator.Blazor;
 
 /// <summary>
-/// Parameters for data to be supplied by a <see cref="DataNavigator{TDataItem}"/>'s <see cref="DataNavigator{TDataItem}.ItemsProvider"/>.
+/// Parameters for data to be supplied by a <see cref="DataNavigator2{TDataItem}"/>'s <see cref="DataNavigator2{TDataItem}.ItemsProvider"/>.
 /// </summary>
 /// <typeparam name="TDataItem">The type of data represented by each row in the data repeater.</typeparam>
 public class DataItemsProviderRequest<TDataItem>

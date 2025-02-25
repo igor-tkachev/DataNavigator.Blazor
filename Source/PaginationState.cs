@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Components;
 namespace DataNavigator.Blazor;
 
 /// <summary>
-/// Holds state to represent pagination in a <see cref="DataNavigator{TGridItem}"/>.
+/// Holds state to represent pagination in a <see cref="DataNavigator2{TGridItem}"/>.
 /// </summary>
 public class PaginationState
 {
@@ -25,7 +25,7 @@ public class PaginationState
 
 	/// <summary>
 	/// Gets the total number of items across all pages, if known. The value will be null until an
-	/// associated <see cref="DataNavigator{TGridItem}"/> assigns a value after loading data.
+	/// associated <see cref="DataNavigator2{TGridItem}"/> assigns a value after loading data.
 	/// </summary>
 	public int? TotalItemCount { get; internal set; }
 
@@ -54,7 +54,7 @@ public class PaginationState
 	public bool CanGoForwards     => CurrentPageIndex < LastPageIndex;
 
 	/// <summary>
-	/// Sets the current page index, and notifies any associated <see cref="DataNavigator{TGridItem}"/>
+	/// Sets the current page index, and notifies any associated <see cref="DataNavigator2{TGridItem}"/>
 	/// to fetch and render updated data.
 	/// </summary>
 	/// <param name="pageIndex">The new, zero-based page index.</param>

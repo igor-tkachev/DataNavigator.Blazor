@@ -54,7 +54,7 @@ public partial class DataNavigator<TDataItem>
 	public RenderFragment<TDataItem> EmptyContent { get; set; } = null!;
 
 	/// <summary>
-	/// Optionally links this <see cref="DataNavigator{TGridItem}"/> instance with a <see cref="PaginationState"/> model,
+	/// Optionally links this <see cref="DataNavigator2{TGridItem}"/> instance with a <see cref="PaginationState"/> model,
 	/// causing the grid to fetch and render only the current page of data.
 	///
 	/// This is normally used in conjunction with some UI logic

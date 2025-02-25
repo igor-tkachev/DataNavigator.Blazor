@@ -4,17 +4,16 @@ namespace DataNavigator.Blazor;
 
 // The grid cascades this so that descendant columns can talk back to it. It's an internal type
 // so that it doesn't show up by mistake in unrelated components.
-sealed class InternalGridContext<TGridItem>(DataNavigator<TGridItem> grid)
+sealed class InternalGridContext<TDataItem>(DataNavigator2<TDataItem> grid)
 {
 	int _index;
 	int _rowId;
 	int _cellId;
 
-	public ICollection<TGridItem>             Items                 { get; set; } = [];
-	public int                                TotalItemCount        { get; set; }
-	public int                                TotalViewItemCount    { get; set; }
-	public DataNavigator<TGridItem>           Grid                  { get; } = grid;
-	public EventCallbackSubscribable<object?> ColumnsFirstCollected { get; } = new();
+	public ICollection<TDataItem>   Items                 { get; set; } = [];
+	public int                      TotalItemCount        { get; set; }
+	public int                      TotalViewItemCount    { get; set; }
+	public DataNavigator2<TDataItem> Grid                  { get; } = grid;
 
 	public int GetNextRowId()
 	{
