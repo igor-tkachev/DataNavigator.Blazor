@@ -20,10 +20,10 @@ namespace DataNavigator.Blazor
 			Console.WriteLine($"--- DataNavigator.ctor ---");
 		}
 
-		[Inject] ILogger<DataNavigator2<TDataItem>> Logger           { get; set; }
-		[Inject] PersistentComponentState           ApplicationState { get; set; } = default!;
-		[Inject] IJSRuntime                         JSRuntime        { get; set; } = default!;
-		[Inject] NavigationManager                  Navigation       { get; set; } = default!;
+		[Inject] ILogger<DataNavigator2<TDataItem>> Logger           { get; set; } = null!;
+		[Inject] PersistentComponentState           ApplicationState { get; set; } = null!;
+		[Inject] IJSRuntime                         JSRuntime        { get; set; } = null!;
+		[Inject] NavigationManager                  Navigation       { get; set; } = null!;
 
 		[Parameter] public string?                       Id                 { get; set; }
 		[Parameter] public PaginationState?              Pagination         { get; set; }
@@ -38,8 +38,6 @@ namespace DataNavigator.Blazor
 		PersistingComponentStateSubscription? _persistingSubscription;
 		RenderHandle                          _renderHandle;
 		ICollection<TDataItem>?               _items;
-//		bool                                  _shouldRefresh = true;
-//		bool                                  _shouldRender;
 		int                                   _lastCurrentPageIndex;
 		int                                   _lastTotalItemCount;
 		bool                                  _isInitialized;
@@ -149,9 +147,6 @@ namespace DataNavigator.Blazor
 					if (ApplicationState.TryTakeFromJson($"items_{Id}", out ICollection<TDataItem>? items))
 						_items = items;
 
-					//_shouldRefresh = false;
-					//_shouldRender  = true;
-
 					LogState("after persist");
 
 					NotifyRender();
@@ -187,12 +182,7 @@ namespace DataNavigator.Blazor
 			{
 				if (renderCount == 1)
 				{
-//					if (!_shouldRender)
-//						return;
-
 					LogState($"{_items?.Count} items rendering...");
-
-//					_shouldRender = false;
 
 					if (_items is not null)
 					{
@@ -336,9 +326,6 @@ namespace DataNavigator.Blazor
 					_lastCurrentPageIndex = data.PageIndex;
 					_lastTotalItemCount   = data.TotalItemCount;
 
-//					_shouldRefresh = false;
-//					_shouldRender  = true;
-
 					if (Pagination is not null)
 					{
 						Pagination.CurrentPageIndex = _lastCurrentPageIndex;
@@ -362,7 +349,8 @@ namespace DataNavigator.Blazor
 
 					NotifyRender();
 
-					return;
+					if (data is not { IsBrowser: true, RendererInfo: "WebAssembly", IsInteractive: true })
+						return;
 				}
 			}
 
@@ -405,9 +393,8 @@ namespace DataNavigator.Blazor
 		{
 			LogInfo();
 
-//			_shouldRefresh = false;
-
-			_pendingDataLoadCancellationTokenSource?.Cancel();
+			if (_pendingDataLoadCancellationTokenSource is not null)
+				await _pendingDataLoadCancellationTokenSource.CancelAsync();
 
 			var thisLoadCts = _pendingDataLoadCancellationTokenSource = new CancellationTokenSource();
 			var startIndex  = Pagination is null ? 0 : Pagination.CurrentPageIndex * Pagination.ItemsPerPage;
@@ -460,7 +447,6 @@ namespace DataNavigator.Blazor
 				_items                = result.Value.Items;
 				_lastCurrentPageIndex = Pagination?.CurrentPageIndex ?? 0;
 				_lastTotalItemCount   = result.Value.TotalItemCount;
-//				_shouldRender         = true;
 
 				if (Pagination is not null)
 					await Pagination.SetTotalItemCountAsync(_lastTotalItemCount);
@@ -495,8 +481,6 @@ namespace DataNavigator.Blazor
 					IsBrowser                : {OperatingSystem.IsBrowser()}
 					RendererInfo             : {_renderHandle.RendererInfo.Name}
 					IsInteractive            : {_renderHandle.RendererInfo.IsInteractive}
-					_shouldRefresh           : {0/*_shouldRefresh*/}
-					_shouldRender            : {0/*_shouldRender*/}
 					Pagination?.ItemsPerPage : {Pagination?.ItemsPerPage}
 					_items?.Count            : {_items?.Count}
 					_lastCurrentPageIndex    : {_lastCurrentPageIndex,5} | {Pagination?.CurrentPageIndex, -5} : Pagination?.CurrentPageIndex

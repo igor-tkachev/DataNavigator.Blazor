@@ -8,9 +8,9 @@
 @using Microsoft.JSInterop
 @implements IPaginationStateSubscriber
 @implements IDisposable
-@inject PersistentComponentState          ApplicationState
+@inject PersistentComponentState           ApplicationState
 @inject ILogger<DataNavigator2<TDataItem>> Logger
-@inject IJSRuntime                        JSRuntime
+@inject IJSRuntime                         JSRuntime
 @{
 	LogState($"DataNavigator {_items?.Count} items rendering...");
 
