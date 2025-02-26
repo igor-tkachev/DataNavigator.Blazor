@@ -7,9 +7,9 @@ using Microsoft.Extensions.Logging;
 
 namespace DataNavigator.Blazor;
 
-public partial class DataNavigator<TDataItem>
+public partial class DataNavigatorOld<TDataItem>
 {
-	public DataNavigator()
+	public DataNavigatorOld()
 	{
 		LogState(".ctor");
 	}

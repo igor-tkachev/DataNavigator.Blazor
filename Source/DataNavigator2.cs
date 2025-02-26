@@ -407,10 +407,7 @@ namespace DataNavigator.Blazor
 				if (ItemsProvider is not null)
 				{
 					IsLoading = true;
-
-					LogInfo("before request ItemsProvider");
 					result = await ItemsProvider(request);
-					LogInfo($"after request ItemsProvider {result.Value.TotalItemCount}");
 				}
 				else if (Items is not null)
 				{
@@ -429,10 +426,7 @@ namespace DataNavigator.Blazor
 					result = DataItemsProviderResult.From(Array.Empty<TDataItem>(), 0);
 				}
 			}
-			catch (TaskCanceledException)
-			{
-			}
-			catch (OperationCanceledException)
+			catch when (thisLoadCts.IsCancellationRequested)
 			{
 			}
 			finally
