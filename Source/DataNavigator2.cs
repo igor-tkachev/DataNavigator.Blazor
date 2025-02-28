@@ -182,18 +182,20 @@ namespace DataNavigator.Blazor
 			{
 				if (renderCount == 1)
 				{
-					LogState($"{_items?.Count} items rendering...");
+					var items = _items;
 
-					if (_items is not null)
+					LogState($"{items?.Count} items rendering...");
+
+					if (items is not null)
 					{
 						if (ChildContent is not null)
-							foreach (var item in _items)
+							foreach (var item in items)
 								builder.AddContent(0, ChildContent(item));
 					}
 
 					if (CustomPersistState)
 					{
-						if (_items != null)
+						if (items != null)
 						{
 							builder.AddMarkupContent(1,
 								$"""
